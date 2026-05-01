@@ -121,3 +121,28 @@ def test_single_matrix_scale_with_arbitrary_name_and_reverse():
     assert p["Answers"]["1"]["Display"] == "전혀 동의하지 않는다"
     assert p["Answers"]["7"]["Display"] == "매우 동의한다"
     assert p["RecodeValues"] == {"1": "1", "2": "6", "3": "3"}
+
+
+def test_seven_scales_with_mixed_names_supported():
+    scales = [
+        Scale(name=name, anchor="7-point Likert",
+              statements=["문항 a", "문항 b"], reverse_indices=[])
+        for name in ["AS", "WBI", "Resilience", "MyScale", "스케일", "Foo7", "G"]
+    ]
+    survey = _minimal_survey().model_copy(update={"scales": scales})
+    qsf = build_qsf(survey)
+    scale_qs = [e for e in qsf["SurveyElements"]
+                if e.get("PrimaryAttribute", "").startswith("QID_SCALE_")]
+    qids = sorted(e["PrimaryAttribute"] for e in scale_qs)
+    assert qids == [f"QID_SCALE_{i}" for i in range(1, 8)]
+    descs = [e["Payload"]["QuestionDescription"] for e in
+             sorted(scale_qs, key=lambda e: e["PrimaryAttribute"])]
+    assert descs == [f"{n} Scale" for n in
+                     ["AS", "WBI", "Resilience", "MyScale", "스케일", "Foo7", "G"]]
+
+
+def test_no_scales_produces_zero_scale_sqs():
+    qsf = build_qsf(_minimal_survey())
+    scale_qids = [e for e in qsf["SurveyElements"]
+                  if e.get("PrimaryAttribute", "").startswith("QID_SCALE_")]
+    assert scale_qids == []
