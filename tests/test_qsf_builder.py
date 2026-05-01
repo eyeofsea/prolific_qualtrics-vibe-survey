@@ -53,3 +53,17 @@ def test_survey_options_present():
     assert payload["SurveyProtection"] == "PublicSurvey"
     assert payload["BackButton"] == "false"
     assert payload["NoIndex"] == "Yes"
+
+
+def test_consent_question_present():
+    survey = _minimal_survey().model_copy(update={"consent_text": "본 연구의 목적은 ..."})
+    qsf = build_qsf(survey)
+    consent = next(
+        (e for e in qsf["SurveyElements"]
+         if e.get("Element") == "SQ" and e.get("PrimaryAttribute") == "QID_CONSENT"),
+        None,
+    )
+    assert consent is not None
+    assert consent["Payload"]["QuestionType"] == "DB"
+    assert consent["Payload"]["QuestionText"] == "본 연구의 목적은 ..."
+    assert consent["Payload"]["DataExportTag"] == "Q_CONSENT"

@@ -14,6 +14,7 @@ def _new_survey_id() -> str:
 def build_qsf(survey: SurveyInput) -> dict:
     survey_id = _new_survey_id()
     elements: list[dict] = [_build_survey_options(survey_id)]
+    elements.append(_build_consent_sq(survey_id, survey.consent_text))
     return {
         "SurveyEntry": _build_survey_entry(survey_id, survey.title),
         "SurveyElements": elements,
@@ -69,5 +70,26 @@ def _build_survey_options(survey_id: str) -> dict:
             "SkinType": "MQ",
             "Skin": "qbase-fluid",
             "NewScoring": 1,
+        },
+    }
+
+
+def _build_consent_sq(survey_id: str, consent_text: str) -> dict:
+    return {
+        "SurveyID": survey_id,
+        "Element": "SQ",
+        "PrimaryAttribute": "QID_CONSENT",
+        "SecondaryAttribute": "Consent text",
+        "TertiaryAttribute": None,
+        "Payload": {
+            "QuestionText": consent_text,
+            "DataExportTag": "Q_CONSENT",
+            "QuestionType": "DB",
+            "Selector": "TB",
+            "Configuration": {"QuestionDescriptionOption": "UseText"},
+            "QuestionDescription": "Consent",
+            "Validation": {"Settings": {"ForceResponse": "OFF", "Type": "None"}},
+            "Language": [],
+            "QuestionID": "QID_CONSENT",
         },
     }
