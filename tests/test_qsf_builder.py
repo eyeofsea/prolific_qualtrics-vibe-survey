@@ -172,3 +172,17 @@ def test_attention_check_absent_when_none():
     att = [e for e in qsf["SurveyElements"]
            if e.get("PrimaryAttribute") == "QID_ATTENTION"]
     assert att == []
+
+
+def test_end_question_contains_completion_code():
+    qsf = build_qsf(_minimal_survey())  # completion_code="ABC12345"
+    end = next(
+        (e for e in qsf["SurveyElements"]
+         if e.get("PrimaryAttribute") == "QID_END"),
+        None,
+    )
+    assert end is not None
+    text = end["Payload"]["QuestionText"]
+    assert "ABC12345" in text
+    assert "코드" in text
+    assert end["Payload"]["QuestionType"] == "DB"

@@ -21,6 +21,7 @@ def build_qsf(survey: SurveyInput) -> dict:
         elements.append(_build_scale_sq(survey_id, s, i))
     if survey.attention_check is not None:
         elements.append(_build_attention_sq(survey_id, survey.attention_check))
+    elements.append(_build_end_sq(survey_id, survey.completion_code))
     return {
         "SurveyEntry": _build_survey_entry(survey_id, survey.title),
         "SurveyElements": elements,
@@ -237,5 +238,31 @@ def _build_attention_sq(survey_id: str, attn: AttentionCheck) -> dict:
             "Language": [],
             "QuestionID": "QID_ATTENTION",
             "AttentionExpected": attn.expected,
+        },
+    }
+
+
+def _build_end_sq(survey_id: str, code: str) -> dict:
+    text = (
+        f"설문에 참여해 주셔서 감사합니다.\n\n"
+        f"Prolific Completion Code: {code}\n\n"
+        f"위 코드를 Prolific에 입력하셔야 보상이 지급됩니다."
+    )
+    return {
+        "SurveyID": survey_id,
+        "Element": "SQ",
+        "PrimaryAttribute": "QID_END",
+        "SecondaryAttribute": "End message",
+        "TertiaryAttribute": None,
+        "Payload": {
+            "QuestionText": text,
+            "DataExportTag": "Q_END",
+            "QuestionType": "DB",
+            "Selector": "TB",
+            "Configuration": {"QuestionDescriptionOption": "UseText"},
+            "QuestionDescription": "End",
+            "Validation": {"Settings": {"ForceResponse": "OFF", "Type": "None"}},
+            "Language": [],
+            "QuestionID": "QID_END",
         },
     }
