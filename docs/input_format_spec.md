@@ -50,10 +50,8 @@ TYPE: SingleChoice
 
 ### `## SCALE: <name>`
 - 표준 QSF 템플릿의 매트릭스 슬롯에 매핑
-- 슬롯 순서: `AS`, `RC`, `ID`, `DV`, `HCD`
-- `<name>`이 위 5개 중 하나면 그 슬롯에 매핑
-- 그 외 이름이면 빈 슬롯에 순서대로 채움
-- SCALE 수는 최대 5개
+- 척도명(`<name>`)은 자유롭게 지정 가능 (예: AS, WBI, MyScale).
+- SCALE 수는 최대 7개
 - `ANCHOR:` 한 줄로 anchor 지정 (예: `7-point Likert`)
 - `- 문항. [REVERSE]` 표기 시 그 번호가 `reverse_indices`에 추가
 
@@ -85,17 +83,9 @@ EXPECTED: 5
 COMPLETION_CODE: ABC12345
 ```
 
-## 매트릭스 매핑 예시
+## 매트릭스 빌드 동작
 
-학생이 다음과 같이 입력하면:
-
-```
-## SCALE: ID
-...
-## SCALE: AS
-...
-```
-
-→ AS 슬롯에 두 번째 SCALE, ID 슬롯에 첫 번째 SCALE이 매핑되고, RC/DV/HCD 슬롯의 매트릭스 블록은 Survey Flow에서 제거.
-
-statements 수가 템플릿 슬롯의 기본 statement 수보다 적으면 BlockElements가 축소되고, 많으면 매트릭스 Choices에 추가.
+각 `## SCALE: <name>` 섹션마다 매트릭스 질문 1개와 블록 1개가 생성됩니다.
+DataExportTag 는 등장 순서대로 `Q_SCALE_1`, `Q_SCALE_2`, ... 로 부여되며,
+`<name>` 은 QuestionDescription 에만 사용되어 한국어를 포함한 임의 문자열을
+허용합니다 (예: `AS Scale`, `WBI Scale`, `회복탄력성 Scale`).
