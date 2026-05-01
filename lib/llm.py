@@ -6,9 +6,14 @@ Auto-detects provider from API-key prefix. Single public function:
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Callable, Literal, TypeVar
+
+import anthropic
+from openai import OpenAI
 
 Provider = Literal["anthropic", "openai"]
+
+_T = TypeVar("_T")
 
 
 class LLMError(Exception):
@@ -21,13 +26,10 @@ def detect_provider(api_key: str) -> Provider:
     if api_key.startswith("sk-"):
         return "openai"
     raise LLMError(
-        f"Unknown LLM provider for key starting with '{api_key[:8]}...'. "
+        "Unknown LLM provider for the supplied key. "
         "Anthropic keys start with 'sk-ant-', OpenAI keys with 'sk-'."
     )
 
-
-import anthropic
-from openai import OpenAI
 
 _ANTHROPIC_MODEL = "claude-haiku-4-5"
 _OPENAI_MODEL = "gpt-4.1-mini"
@@ -86,7 +88,10 @@ def _call_anthropic(api_key: str, user_text: str) -> str:
         messages=[{"role": "user", "content": user_text}],
     )
     parts = [block.text for block in msg.content if hasattr(block, "text")]
-    return "".join(parts).strip()
+    text = "".join(parts).strip()
+    if not text:
+        raise LLMError("Anthropic returned an empty response.")
+    return text
 
 
 def _call_openai(api_key: str, user_text: str) -> str:
@@ -99,10 +104,14 @@ def _call_openai(api_key: str, user_text: str) -> str:
             {"role": "user", "content": user_text},
         ],
     )
-    return (resp.choices[0].message.content or "").strip()
+    content = resp.choices[0].message.content
+    text = (content or "").strip()
+    if not text:
+        raise LLMError("OpenAI returned an empty response.")
+    return text
 
 
-def _with_retry(fn, *args):
+def _with_retry(fn: Callable[..., _T], *args: object) -> _T:
     last_exc: Exception | None = None
     for _ in range(2):  # initial + 1 retry
         try:
