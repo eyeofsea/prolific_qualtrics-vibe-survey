@@ -11,6 +11,7 @@ from lib.qsf import (
     SurveyInput,
 )
 from lib.qsf_builder import build_qsf
+from lib.validate import QSFValidator
 
 
 def _minimal_survey() -> SurveyInput:
@@ -249,3 +250,31 @@ def test_survey_flow_has_prolific_pid_and_blocks_in_order():
     for fid in flow_ids:
         assert _re.match(r"^FL_\d+$", fid), f"bad FlowID: {fid}"
     assert len(set(flow_ids)) == len(flow_ids)  # unique
+
+
+def _full_survey() -> SurveyInput:
+    return SurveyInput(
+        title="적응성 연구",
+        consent_text="본 연구는 직장인의 변화 적응성을 조사합니다. " * 10,
+        demographics=[
+            Question(text="연령대?", type="SingleChoice",
+                     choices=["20대", "30대", "40대"]),
+            Question(text="자유 의견", type="Text", choices=[]),
+        ],
+        scales=[
+            Scale(name="WBI", anchor="7-point Likert",
+                  statements=["빠르게 적응한다", "두렵다"], reverse_indices=[2]),
+            Scale(name="Resilience", anchor="7-point Likert",
+                  statements=["a", "b", "c"], reverse_indices=[]),
+        ],
+        attention_check=AttentionCheck(text="5번 선택", expected=5),
+        completion_code="ABCDEF12",
+    )
+
+
+def test_builder_output_passes_validator_with_zero_errors():
+    qsf = build_qsf(_full_survey())
+    report = QSFValidator(qsf).run()
+    assert report.errors == [], (
+        f"errors: {[(e.code, e.message) for e in report.errors]}"
+    )
