@@ -1,9 +1,8 @@
-"""parse_text / inject_into_template fixture 5종."""
+"""parse_text 파서 단위 테스트."""
 
 import pytest
 
-from lib.qsf import parse_text, inject_into_template, export
-from lib.validate import QSFValidator
+from lib.qsf import parse_text
 
 
 # ── Fixture inputs ─────────────────────────────────────
@@ -185,10 +184,10 @@ def test_parse_multichoice_and_text():
 
 def test_parse_too_many_scales_raises():
     text = "# SURVEY: x\n## CONSENT\n" + ("a" * 100) + "\n"
-    for i in range(6):
+    for i in range(8):
         text += f"## SCALE: S{i}\nANCHOR: 7-point Likert\n- a.\n"
     text += "## END\nCOMPLETION_CODE: ABC12345\n"
-    with pytest.raises(ValueError, match="SCALE 은 최대 5개"):
+    with pytest.raises(ValueError, match="최대 7"):
         parse_text(text)
 
 
@@ -214,144 +213,6 @@ def test_parse_demographics_unknown_type_raises():
     )
     with pytest.raises(ValueError, match="알 수 없"):
         parse_text(text)
-
-
-# ── inject_into_template 테스트 ─────────────────────────
-
-@pytest.mark.parametrize(
-    "fixture",
-    [MINIMAL, WITH_ATTENTION, ALL_FIVE_SCALES, CUSTOM_SCALE_NAME, MULTICHOICE_AND_TEXT],
-)
-def test_inject_then_validate_passes(fixture, template):
-    s = parse_text(fixture)
-    qsf = inject_into_template(s, template)
-    report = QSFValidator(qsf, template=template).run()
-    assert not report.is_blocked, (
-        f"Errors: {[(e.code, e.message) for e in report.errors]}"
-    )
-
-
-def test_inject_preserves_prolific_pid_embed(template):
-    s = parse_text(MINIMAL)
-    qsf = inject_into_template(s, template)
-    flow = next(
-        e for e in qsf["SurveyElements"] if e.get("Element") == "FL"
-    )["Payload"]
-    found = False
-    stack = [flow]
-    while stack:
-        node = stack.pop()
-        if node.get("Type") == "EmbeddedData":
-            for ed in node.get("EmbeddedData", []) or []:
-                if ed.get("Field") == "PROLIFIC_PID":
-                    found = True
-        for child in node.get("Flow", []) or []:
-            stack.append(child)
-    assert found
-
-
-def test_inject_sets_survey_name(template):
-    s = parse_text(MINIMAL)
-    qsf = inject_into_template(s, template)
-    assert qsf["SurveyEntry"]["SurveyName"] == "최소 설문"
-
-
-def test_inject_drops_unused_scale_blocks(template):
-    s = parse_text(MINIMAL)  # only AS
-    qsf = inject_into_template(s, template)
-    blocks = next(
-        e for e in qsf["SurveyElements"] if e.get("Element") == "BL"
-    )["Payload"]
-    block_ids = {b["ID"] for b in blocks}
-    # AS remains, others (RC/ID/DV/HCD) removed
-    assert "BL_SCALE_AS" in block_ids
-    assert "BL_SCALE_RC" not in block_ids
-    assert "BL_SCALE_ID" not in block_ids
-    assert "BL_SCALE_DV" not in block_ids
-    assert "BL_SCALE_HCD" not in block_ids
-
-
-def test_inject_keeps_all_five_scales(template):
-    s = parse_text(ALL_FIVE_SCALES)
-    qsf = inject_into_template(s, template)
-    blocks = next(
-        e for e in qsf["SurveyElements"] if e.get("Element") == "BL"
-    )["Payload"]
-    block_ids = {b["ID"] for b in blocks}
-    for slot in ["AS", "RC", "ID", "DV", "HCD"]:
-        assert f"BL_SCALE_{slot}" in block_ids
-
-
-def test_inject_writes_completion_code(template):
-    s = parse_text(MINIMAL)
-    qsf = inject_into_template(s, template)
-    end = next(
-        e for e in qsf["SurveyElements"]
-        if e.get("Element") == "SQ" and e.get("PrimaryAttribute") == "QID_END"
-    )
-    assert "ABC12345" in end["Payload"]["QuestionText"]
-    assert "PLACEHOLDER" not in end["Payload"]["QuestionText"]
-
-
-def test_inject_reverse_index_creates_recode(template):
-    s = parse_text(MINIMAL)
-    qsf = inject_into_template(s, template)
-    as_q = next(
-        e for e in qsf["SurveyElements"]
-        if e.get("Element") == "SQ" and e.get("PrimaryAttribute") == "QID_SCALE_AS"
-    )
-    recode = as_q["Payload"].get("RecodeValues", {})
-    # statement #2 reversed → 8-2 = 6
-    assert recode["1"] == "1"
-    assert recode["2"] == "6"
-
-
-def test_inject_demographics_replaces_template_questions(template):
-    s = parse_text(WITH_ATTENTION)
-    qsf = inject_into_template(s, template)
-    demo_block = next(
-        b for b in next(
-            e for e in qsf["SurveyElements"] if e.get("Element") == "BL"
-        )["Payload"]
-        if b["ID"] == "BL_DEMOGRAPHICS"
-    )
-    assert len(demo_block["BlockElements"]) == 1
-    qid = demo_block["BlockElements"][0]["QuestionID"]
-    q = next(
-        e for e in qsf["SurveyElements"]
-        if e.get("Element") == "SQ" and e.get("PrimaryAttribute") == qid
-    )
-    assert q["Payload"]["QuestionText"] == "직무 분야는?"
-
-
-def test_export_writes_utf8(tmp_path, template):
-    s = parse_text(MINIMAL)
-    qsf = inject_into_template(s, template)
-    path = tmp_path / "out.qsf"
-    export(qsf, str(path))
-    text = path.read_text(encoding="utf-8")
-    assert "최소 설문" in text
-    assert "ABC12345" in text
-
-
-def test_inject_attention_check_text(template):
-    s = parse_text(WITH_ATTENTION)
-    qsf = inject_into_template(s, template)
-    att = next(
-        e for e in qsf["SurveyElements"]
-        if e.get("Element") == "SQ" and e.get("PrimaryAttribute") == "QID_ATTENTION"
-    )
-    assert "'5'를 선택하세요." in att["Payload"]["QuestionText"]
-
-
-def test_inject_no_attention_drops_block(template):
-    s = parse_text(MINIMAL)  # no attention
-    qsf = inject_into_template(s, template)
-    blocks = next(
-        e for e in qsf["SurveyElements"] if e.get("Element") == "BL"
-    )["Payload"]
-    block_ids = {b["ID"] for b in blocks}
-    assert "BL_ATTENTION" not in block_ids
 
 
 def test_seven_scales_allowed():

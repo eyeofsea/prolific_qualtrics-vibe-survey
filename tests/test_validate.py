@@ -1,12 +1,12 @@
 """22개 validation rule × pass/fail 케이스."""
 
 import copy
-import json
 from pathlib import Path
 
 import pytest
 
-from lib.qsf import parse_text, inject_into_template
+from lib.qsf import parse_text
+from lib.qsf_builder import build_qsf
 from lib.validate import QSFValidator
 
 
@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).parent.parent
 # ── 기준 QSF (검증 통과해야 함) ─────────────────────────
 
 @pytest.fixture
-def baseline_qsf(template):
+def baseline_qsf():
     text = """# SURVEY: 테스트 설문
 
 ## CONSENT
@@ -37,15 +37,15 @@ ANCHOR: 7-point Likert
 COMPLETION_CODE: GOOD1234
 """
     s = parse_text(text)
-    return inject_into_template(s, template)
+    return build_qsf(s)
 
 
 def _codes(report):
     return [i.code for i in report.issues]
 
 
-def test_baseline_passes(baseline_qsf, template):
-    r = QSFValidator(baseline_qsf, template=template).run()
+def test_baseline_passes(baseline_qsf):
+    r = QSFValidator(baseline_qsf).run()
     assert not r.is_blocked, [(e.code, e.message) for e in r.errors]
 
 
@@ -150,7 +150,7 @@ def test_invalid_flow_id_pass(baseline_qsf):
 def test_matrix_missing_answers_fail(baseline_qsf):
     as_q = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_SCALE_AS"
+        if e.get("PrimaryAttribute") == "QID_SCALE_1"
     )
     del as_q["Payload"]["Answers"]
     r = QSFValidator(baseline_qsf).run()
@@ -167,7 +167,7 @@ def test_matrix_missing_answers_pass(baseline_qsf):
 def test_matrix_anchor_count_warn(baseline_qsf):
     as_q = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_SCALE_AS"
+        if e.get("PrimaryAttribute") == "QID_SCALE_1"
     )
     as_q["Payload"]["Answers"] = {str(i): {"Display": str(i)} for i in range(1, 6)}
     r = QSFValidator(baseline_qsf).run()
@@ -184,7 +184,7 @@ def test_matrix_anchor_count_pass(baseline_qsf):
 def test_empty_question_text_fail(baseline_qsf):
     consent = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_CONSENT_1"
+        if e.get("PrimaryAttribute") == "QID_CONSENT"
     )
     consent["Payload"]["QuestionText"] = ""
     r = QSFValidator(baseline_qsf).run()
@@ -201,7 +201,7 @@ def test_empty_question_text_pass(baseline_qsf):
 def test_invalid_question_type_fail(baseline_qsf):
     consent = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_CONSENT_1"
+        if e.get("PrimaryAttribute") == "QID_CONSENT"
     )
     consent["Payload"]["QuestionType"] = "WeirdType"
     r = QSFValidator(baseline_qsf).run()
@@ -218,7 +218,7 @@ def test_invalid_question_type_pass(baseline_qsf):
 def test_encoding_artifact_fail(baseline_qsf):
     consent = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_CONSENT_1"
+        if e.get("PrimaryAttribute") == "QID_CONSENT"
     )
     consent["Payload"]["QuestionText"] = "﻿" + consent["Payload"]["QuestionText"]
     r = QSFValidator(baseline_qsf).run()
@@ -256,7 +256,7 @@ def test_branch_refs_missing_pass(baseline_qsf):
 def test_duplicate_qid_fail(baseline_qsf):
     consent = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_CONSENT_1"
+        if e.get("PrimaryAttribute") == "QID_CONSENT"
     )
     baseline_qsf["SurveyElements"].append(copy.deepcopy(consent))
     r = QSFValidator(baseline_qsf).run()
@@ -323,7 +323,7 @@ def test_completion_code_missing_pass(baseline_qsf):
 def test_consent_too_short_info(baseline_qsf):
     consent = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_CONSENT_1"
+        if e.get("PrimaryAttribute") == "QID_CONSENT"
     )
     consent["Payload"]["QuestionText"] = "짧음."
     r = QSFValidator(baseline_qsf).run()
@@ -340,7 +340,7 @@ def test_consent_too_short_pass(baseline_qsf):
 def test_consent_too_long_warn(baseline_qsf):
     consent = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_CONSENT_1"
+        if e.get("PrimaryAttribute") == "QID_CONSENT"
     )
     consent["Payload"]["QuestionText"] = "가" * 1600
     r = QSFValidator(baseline_qsf).run()
@@ -357,7 +357,7 @@ def test_consent_too_long_pass(baseline_qsf):
 def test_reverse_index_out_of_range_fail(baseline_qsf):
     as_q = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_SCALE_AS"
+        if e.get("PrimaryAttribute") == "QID_SCALE_1"
     )
     as_q["Payload"]["RecodeValues"] = {"99": "1"}
     r = QSFValidator(baseline_qsf).run()
@@ -369,28 +369,12 @@ def test_reverse_index_out_of_range_pass(baseline_qsf):
     assert "REVERSE_INDEX_OUT_OF_RANGE" not in _codes(r)
 
 
-# ── 20. TEMPLATE_DRIFT ──────────────────────────────────
-
-def test_template_drift_warn(baseline_qsf, template):
-    flow = next(e for e in baseline_qsf["SurveyElements"] if e["Element"] == "FL")
-    flow["Payload"]["Flow"] = [
-        f for f in flow["Payload"]["Flow"] if f.get("Type") != "EmbeddedData"
-    ]
-    r = QSFValidator(baseline_qsf, template=template).run()
-    assert "TEMPLATE_DRIFT" in _codes(r)
-
-
-def test_template_drift_pass(baseline_qsf, template):
-    r = QSFValidator(baseline_qsf, template=template).run()
-    assert "TEMPLATE_DRIFT" not in _codes(r)
-
-
 # ── 21. SMART_QUOTE_DETECTED ────────────────────────────
 
 def test_smart_quote_detected_info(baseline_qsf):
     consent = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_CONSENT_1"
+        if e.get("PrimaryAttribute") == "QID_CONSENT"
     )
     consent["Payload"]["QuestionText"] += " “smart” quote"
     r = QSFValidator(baseline_qsf).run()
@@ -420,7 +404,7 @@ def test_trailing_comma_pass(baseline_qsf):
 def test_report_is_blocked_only_on_errors(baseline_qsf):
     consent = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_CONSENT_1"
+        if e.get("PrimaryAttribute") == "QID_CONSENT"
     )
     consent["Payload"]["QuestionText"] = "짧음."  # info
     r = QSFValidator(baseline_qsf).run()
@@ -430,7 +414,7 @@ def test_report_is_blocked_only_on_errors(baseline_qsf):
 def test_report_is_blocked_on_error(baseline_qsf):
     consent = next(
         e for e in baseline_qsf["SurveyElements"]
-        if e.get("PrimaryAttribute") == "QID_CONSENT_1"
+        if e.get("PrimaryAttribute") == "QID_CONSENT"
     )
     consent["Payload"]["QuestionText"] = ""
     r = QSFValidator(baseline_qsf).run()
