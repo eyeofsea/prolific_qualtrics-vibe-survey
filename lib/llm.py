@@ -102,6 +102,16 @@ def _call_openai(api_key: str, user_text: str) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
+def _with_retry(fn, *args):
+    last_exc: Exception | None = None
+    for _ in range(2):  # initial + 1 retry
+        try:
+            return fn(*args)
+        except Exception as e:  # noqa: BLE001
+            last_exc = e
+    raise LLMError(str(last_exc))
+
+
 def freeform_to_markdown(
     text: str,
     api_key: str,
@@ -111,7 +121,7 @@ def freeform_to_markdown(
         raise LLMError("입력 텍스트가 비어 있습니다.")
     provider = provider_override or detect_provider(api_key)
     if provider == "anthropic":
-        return _call_anthropic(api_key, text)
+        return _with_retry(_call_anthropic, api_key, text)
     if provider == "openai":
-        return _call_openai(api_key, text)
+        return _with_retry(_call_openai, api_key, text)
     raise LLMError(f"Provider '{provider}' not implemented.")

@@ -85,3 +85,38 @@ def test_provider_override_forces_provider():
         )
     assert out == "# SURVEY: x"
     assert mock_client.chat.completions.create.called
+
+
+def test_anthropic_retries_once_then_raises_llm_error():
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [
+        Exception("boom"),
+        Exception("boom again"),
+    ]
+    with patch("lib.llm.anthropic.Anthropic", return_value=mock_client):
+        with pytest.raises(LLMError, match="boom again"):
+            freeform_to_markdown("x", api_key="sk-ant-test")
+    assert mock_client.messages.create.call_count == 2
+
+
+def test_anthropic_succeeds_on_second_attempt():
+    mock_msg = MagicMock()
+    mock_msg.content = [MagicMock(text="# SURVEY: ok")]
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = [Exception("transient"), mock_msg]
+    with patch("lib.llm.anthropic.Anthropic", return_value=mock_client):
+        out = freeform_to_markdown("x", api_key="sk-ant-test")
+    assert out == "# SURVEY: ok"
+    assert mock_client.messages.create.call_count == 2
+
+
+def test_openai_also_retries_once():
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.side_effect = [
+        Exception("first"),
+        Exception("second"),
+    ]
+    with patch("lib.llm.OpenAI", return_value=mock_client):
+        with pytest.raises(LLMError, match="second"):
+            freeform_to_markdown("x", api_key="sk-proj-test")
+    assert mock_client.chat.completions.create.call_count == 2
