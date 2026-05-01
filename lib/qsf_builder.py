@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from lib.qsf import SurveyInput
+from lib.qsf import Question, SurveyInput
 
 
 def _new_survey_id() -> str:
@@ -15,6 +15,8 @@ def build_qsf(survey: SurveyInput) -> dict:
     survey_id = _new_survey_id()
     elements: list[dict] = [_build_survey_options(survey_id)]
     elements.append(_build_consent_sq(survey_id, survey.consent_text))
+    for i, q in enumerate(survey.demographics, start=1):
+        elements.append(_build_demo_sq(survey_id, q, i))
     return {
         "SurveyEntry": _build_survey_entry(survey_id, survey.title),
         "SurveyElements": elements,
@@ -92,4 +94,45 @@ def _build_consent_sq(survey_id: str, consent_text: str) -> dict:
             "Language": [],
             "QuestionID": "QID_CONSENT",
         },
+    }
+
+
+def _question_type_to_qualtrics(qtype: str) -> tuple[str, str, str | None]:
+    if qtype == "SingleChoice":
+        return ("MC", "SAVR", "TX")
+    if qtype == "MultiChoice":
+        return ("MC", "MAVR", "TX")
+    if qtype == "Text":
+        return ("TE", "SL", None)
+    raise ValueError(f"unknown demographics type: {qtype}")
+
+
+def _build_demo_sq(survey_id: str, q: Question, idx: int) -> dict:
+    qid = f"QID_DEMO_{idx}"
+    qtype, selector, sub = _question_type_to_qualtrics(q.type)
+    payload: dict = {
+        "QuestionText": q.text,
+        "DataExportTag": f"Q_DEMO_{idx}",
+        "QuestionType": qtype,
+        "Selector": selector,
+        "Configuration": {"QuestionDescriptionOption": "UseText"},
+        "QuestionDescription": q.text[:60],
+        "Validation": {"Settings": {"ForceResponse": "ON", "Type": "None"}},
+        "Language": [],
+        "QuestionID": qid,
+    }
+    if sub is not None:
+        payload["SubSelector"] = sub
+    if q.choices:
+        payload["Choices"] = {
+            str(i + 1): {"Display": c} for i, c in enumerate(q.choices)
+        }
+        payload["ChoiceOrder"] = [str(i + 1) for i in range(len(q.choices))]
+    return {
+        "SurveyID": survey_id,
+        "Element": "SQ",
+        "PrimaryAttribute": qid,
+        "SecondaryAttribute": q.text[:60],
+        "TertiaryAttribute": None,
+        "Payload": payload,
     }

@@ -67,3 +67,25 @@ def test_consent_question_present():
     assert consent["Payload"]["QuestionType"] == "DB"
     assert consent["Payload"]["QuestionText"] == "본 연구의 목적은 ..."
     assert consent["Payload"]["DataExportTag"] == "Q_CONSENT"
+
+
+def test_demographics_three_types():
+    survey = _minimal_survey().model_copy(update={
+        "demographics": [
+            Question(text="연령대?", type="SingleChoice", choices=["20대", "30대", "40대"]),
+            Question(text="관심 분야는?", type="MultiChoice", choices=["A", "B", "C"]),
+            Question(text="자유 의견", type="Text", choices=[]),
+        ],
+    })
+    qsf = build_qsf(survey)
+    demos = [e for e in qsf["SurveyElements"]
+             if e.get("Element") == "SQ"
+             and e.get("PrimaryAttribute", "").startswith("QID_DEMO_")]
+    assert len(demos) == 3
+    by_id = {d["PrimaryAttribute"]: d for d in demos}
+    assert by_id["QID_DEMO_1"]["Payload"]["QuestionType"] == "MC"
+    assert by_id["QID_DEMO_1"]["Payload"]["Selector"] == "SAVR"
+    assert by_id["QID_DEMO_2"]["Payload"]["Selector"] == "MAVR"
+    assert by_id["QID_DEMO_3"]["Payload"]["QuestionType"] == "TE"
+    assert by_id["QID_DEMO_1"]["Payload"]["Choices"]["1"]["Display"] == "20대"
+    assert by_id["QID_DEMO_1"]["Payload"]["DataExportTag"] == "Q_DEMO_1"
