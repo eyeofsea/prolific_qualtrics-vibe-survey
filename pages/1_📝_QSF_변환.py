@@ -92,5 +92,3 @@ if st.button("변환 + 검증", type="primary"):
             )
     except ValueError as e:
         st.error(f"파싱 실패: {e}")
-    except FileNotFoundError as e:
-        st.error(f"템플릿 파일을 찾을 수 없음: {e}")
