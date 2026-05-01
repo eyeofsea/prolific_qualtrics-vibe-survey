@@ -36,3 +36,20 @@ def test_top_level_keys():
     qsf = build_qsf(_minimal_survey())
     assert set(qsf.keys()) == {"SurveyEntry", "SurveyElements"}
     assert isinstance(qsf["SurveyElements"], list)
+
+
+def _find_element(qsf: dict, element: str, primary: str) -> dict | None:
+    for el in qsf["SurveyElements"]:
+        if el.get("Element") == element and el.get("PrimaryAttribute") == primary:
+            return el
+    return None
+
+
+def test_survey_options_present():
+    qsf = build_qsf(_minimal_survey())
+    so = _find_element(qsf, "SO", "Survey Options")
+    assert so is not None
+    payload = so["Payload"]
+    assert payload["SurveyProtection"] == "PublicSurvey"
+    assert payload["BackButton"] == "false"
+    assert payload["NoIndex"] == "Yes"

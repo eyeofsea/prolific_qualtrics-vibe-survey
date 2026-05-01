@@ -13,9 +13,10 @@ def _new_survey_id() -> str:
 
 def build_qsf(survey: SurveyInput) -> dict:
     survey_id = _new_survey_id()
+    elements: list[dict] = [_build_survey_options(survey_id)]
     return {
         "SurveyEntry": _build_survey_entry(survey_id, survey.title),
-        "SurveyElements": [],
+        "SurveyElements": elements,
     }
 
 
@@ -38,4 +39,35 @@ def _build_survey_entry(survey_id: str, title: str) -> dict:
         "LastAccessed": "0000-00-00 00:00:00",
         "LastActivated": "0000-00-00 00:00:00",
         "Deleted": None,
+    }
+
+
+def _build_survey_options(survey_id: str) -> dict:
+    return {
+        "SurveyID": survey_id,
+        "Element": "SO",
+        "PrimaryAttribute": "Survey Options",
+        "SecondaryAttribute": None,
+        "TertiaryAttribute": None,
+        "Payload": {
+            "BackButton": "false",
+            "SaveAndContinue": "true",
+            "SurveyProtection": "PublicSurvey",
+            "BallotBoxStuffingPrevention": "false",
+            "NoIndex": "Yes",
+            "SecureResponseFiles": "true",
+            "SurveyExpiration": "None",
+            "SurveyTermination": "DefaultMessage",
+            "Header": "",
+            "Footer": "",
+            "ProgressBarDisplay": "VerboseText",
+            "PartialData": "+1 week",
+            "ValidationMessage": "",
+            "PreviousButton": "",
+            "NextButton": "",
+            "SkinLibrary": "qualtrics",
+            "SkinType": "MQ",
+            "Skin": "qbase-fluid",
+            "NewScoring": 1,
+        },
     }
