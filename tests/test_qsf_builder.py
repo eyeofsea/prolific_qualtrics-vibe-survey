@@ -223,3 +223,29 @@ def test_blocks_with_scales_and_attention():
     scale1_block = next(b for b in bl["Payload"] if b["ID"] == "BL_SCALE_1")
     assert scale1_block["Description"] == "WBI Scale"
     assert scale1_block["BlockElements"] == [{"Type": "Question", "QuestionID": "QID_SCALE_1"}]
+
+
+def test_survey_flow_has_prolific_pid_and_blocks_in_order():
+    survey = _minimal_survey().model_copy(update={
+        "scales": [
+            Scale(name="X", anchor="7-point Likert",
+                  statements=["a"], reverse_indices=[]),
+        ],
+        "attention_check": AttentionCheck(text="t", expected=5),
+    })
+    qsf = build_qsf(survey)
+    fl = _find_element(qsf, "FL", "Survey Flow")
+    assert fl is not None
+    flow = fl["Payload"]["Flow"]
+    assert flow[0]["Type"] == "EmbeddedData"
+    fields = [ed["Field"] for ed in flow[0]["EmbeddedData"]]
+    assert "PROLIFIC_PID" in fields
+    standard_ids = [n["ID"] for n in flow if n.get("Type") == "Standard"]
+    assert standard_ids == [
+        "BL_CONSENT", "BL_DEMOGRAPHICS", "BL_SCALE_1", "BL_ATTENTION", "BL_END",
+    ]
+    flow_ids = [n["FlowID"] for n in flow]
+    import re as _re
+    for fid in flow_ids:
+        assert _re.match(r"^FL_\d+$", fid), f"bad FlowID: {fid}"
+    assert len(set(flow_ids)) == len(flow_ids)  # unique

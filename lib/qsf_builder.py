@@ -15,6 +15,7 @@ def build_qsf(survey: SurveyInput) -> dict:
     survey_id = _new_survey_id()
     elements: list[dict] = []
     elements.append(_build_blocks(survey_id, survey))
+    elements.append(_build_flow(survey_id, survey))
     elements.append(_build_survey_options(survey_id))
     elements.append(_build_consent_sq(survey_id, survey.consent_text))
     for i, q in enumerate(survey.demographics, start=1):
@@ -314,4 +315,53 @@ def _build_blocks(survey_id: str, survey: SurveyInput) -> dict:
         "SecondaryAttribute": None,
         "TertiaryAttribute": None,
         "Payload": blocks,
+    }
+
+
+def _build_flow(survey_id: str, survey: SurveyInput) -> dict:
+    block_ids: list[str] = ["BL_CONSENT", "BL_DEMOGRAPHICS"]
+    for i in range(1, len(survey.scales) + 1):
+        block_ids.append(f"BL_SCALE_{i}")
+    if survey.attention_check is not None:
+        block_ids.append("BL_ATTENTION")
+    block_ids.append("BL_END")
+
+    flow_nodes: list[dict] = [
+        {
+            "Type": "EmbeddedData",
+            "FlowID": "FL_2",
+            "EmbeddedData": [
+                {
+                    "Description": "PROLIFIC_PID",
+                    "Type": "Recipient",
+                    "Field": "PROLIFIC_PID",
+                    "VariableType": "String",
+                    "DataVisibility": [],
+                    "AnalyzeText": False,
+                    "Value": "",
+                },
+            ],
+        },
+    ]
+    next_id = 3
+    for bid in block_ids:
+        flow_nodes.append({
+            "Type": "Standard",
+            "ID": bid,
+            "FlowID": f"FL_{next_id}",
+        })
+        next_id += 1
+
+    return {
+        "SurveyID": survey_id,
+        "Element": "FL",
+        "PrimaryAttribute": "Survey Flow",
+        "SecondaryAttribute": None,
+        "TertiaryAttribute": None,
+        "Payload": {
+            "Type": "Root",
+            "FlowID": "FL_1",
+            "Properties": {"Count": next_id - 1},
+            "Flow": flow_nodes,
+        },
     }
