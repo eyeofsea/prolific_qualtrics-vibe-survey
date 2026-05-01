@@ -89,3 +89,16 @@ COMPLETION_CODE: ABC12345
 DataExportTag 는 등장 순서대로 `Q_SCALE_1`, `Q_SCALE_2`, ... 로 부여되며,
 `<name>` 은 QuestionDescription 에만 사용되어 한국어를 포함한 임의 문자열을
 허용합니다 (예: `AS Scale`, `WBI Scale`, `회복탄력성 Scale`).
+
+## 자유형 텍스트 보조 (선택)
+
+설문 페이지의 "✨ 자유형 텍스트로 시작 (LLM 정규화)" expander에 자연어로 설문 요구를
+적으면 LLM이 이 양식으로 변환합니다. LLM은 설문 주제에 맞게 척도명도 자유롭게
+선택합니다 (최대 7개). 변환 결과는 textarea 에 노출되어 사용자가 직접 검토·편집할
+수 있습니다 (human-in-the-loop).
+
+지원 provider:
+- Anthropic (`claude-haiku-4-5`) — `sk-ant-` 프리픽스로 자동 감지
+- OpenAI (`gpt-4.1-mini`) — `sk-` 프리픽스로 자동 감지
+
+API Key 등록은 좌측 메뉴 "설정" 페이지에서 합니다. 키는 OS keyring에 저장됩니다.
