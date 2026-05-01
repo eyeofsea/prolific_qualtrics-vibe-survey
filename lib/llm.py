@@ -27,6 +27,7 @@ def detect_provider(api_key: str) -> Provider:
 
 
 import anthropic
+from openai import OpenAI
 
 _ANTHROPIC_MODEL = "claude-haiku-4-5"
 _OPENAI_MODEL = "gpt-4.1-mini"
@@ -88,6 +89,19 @@ def _call_anthropic(api_key: str, user_text: str) -> str:
     return "".join(parts).strip()
 
 
+def _call_openai(api_key: str, user_text: str) -> str:
+    client = OpenAI(api_key=api_key)
+    resp = client.chat.completions.create(
+        model=_OPENAI_MODEL,
+        max_tokens=4000,
+        messages=[
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": user_text},
+        ],
+    )
+    return (resp.choices[0].message.content or "").strip()
+
+
 def freeform_to_markdown(
     text: str,
     api_key: str,
@@ -98,4 +112,6 @@ def freeform_to_markdown(
     provider = provider_override or detect_provider(api_key)
     if provider == "anthropic":
         return _call_anthropic(api_key, text)
-    raise LLMError(f"Provider '{provider}' not yet implemented.")
+    if provider == "openai":
+        return _call_openai(api_key, text)
+    raise LLMError(f"Provider '{provider}' not implemented.")

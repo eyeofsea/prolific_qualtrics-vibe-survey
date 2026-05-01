@@ -51,3 +51,37 @@ def test_anthropic_freeform_call_returns_markdown():
 def test_freeform_empty_input_raises():
     with pytest.raises(LLMError, match="비어"):
         freeform_to_markdown("   ", api_key="sk-ant-test")
+
+
+def test_openai_freeform_call_returns_markdown():
+    mock_resp = MagicMock()
+    mock_resp.choices = [MagicMock(message=MagicMock(content="# SURVEY: foo\n## CONSENT\n..."))]
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_resp
+
+    with patch("lib.llm.OpenAI", return_value=mock_client):
+        out = freeform_to_markdown("survey about X", api_key="sk-proj-test")
+
+    assert out.startswith("# SURVEY:")
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["model"] == "gpt-4.1-mini"
+    msgs = call_kwargs["messages"]
+    assert msgs[0]["role"] == "system"
+    assert "# SURVEY:" in msgs[0]["content"]
+    assert msgs[1]["role"] == "user"
+
+
+def test_provider_override_forces_provider():
+    mock_resp = MagicMock()
+    mock_resp.choices = [MagicMock(message=MagicMock(content="# SURVEY: x"))]
+    mock_client = MagicMock()
+    mock_client.chat.completions.create.return_value = mock_resp
+
+    with patch("lib.llm.OpenAI", return_value=mock_client):
+        out = freeform_to_markdown(
+            "x",
+            api_key="sk-ant-actually-anthropic",
+            provider_override="openai",
+        )
+    assert out == "# SURVEY: x"
+    assert mock_client.chat.completions.create.called
