@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from lib.qsf import Question, SurveyInput
+from lib.qsf import Question, Scale, SurveyInput
 
 
 def _new_survey_id() -> str:
@@ -17,6 +17,8 @@ def build_qsf(survey: SurveyInput) -> dict:
     elements.append(_build_consent_sq(survey_id, survey.consent_text))
     for i, q in enumerate(survey.demographics, start=1):
         elements.append(_build_demo_sq(survey_id, q, i))
+    for i, s in enumerate(survey.scales, start=1):
+        elements.append(_build_scale_sq(survey_id, s, i))
     return {
         "SurveyEntry": _build_survey_entry(survey_id, survey.title),
         "SurveyElements": elements,
@@ -133,6 +135,69 @@ def _build_demo_sq(survey_id: str, q: Question, idx: int) -> dict:
         "Element": "SQ",
         "PrimaryAttribute": qid,
         "SecondaryAttribute": q.text[:60],
+        "TertiaryAttribute": None,
+        "Payload": payload,
+    }
+
+
+LIKERT_7POINT = [
+    "전혀 동의하지 않는다",
+    "동의하지 않는다",
+    "약간 동의하지 않는다",
+    "보통이다",
+    "약간 동의한다",
+    "동의한다",
+    "매우 동의한다",
+]
+
+
+def _build_scale_sq(survey_id: str, scale: Scale, idx: int) -> dict:
+    qid = f"QID_SCALE_{idx}"
+    n = len(scale.statements)
+    invalid = [i for i in scale.reverse_indices if i < 1 or i > n]
+    if invalid:
+        raise ValueError(
+            f"SCALE '{scale.name}' REVERSE index 범위 초과: {invalid} "
+            f"(statements {n}개)"
+        )
+    payload: dict = {
+        "QuestionText": "다음 진술에 동의하시는 정도를 표시해 주세요.",
+        "DataExportTag": f"Q_SCALE_{idx}",
+        "QuestionType": "Matrix",
+        "Selector": "Likert",
+        "SubSelector": "SingleAnswer",
+        "Configuration": {
+            "QuestionDescriptionOption": "UseText",
+            "TextPosition": "inline",
+            "ChoiceColumnWidth": 25,
+            "RepeatHeaders": "none",
+            "WhiteSpace": "ON",
+            "MobileFirst": True,
+        },
+        "QuestionDescription": f"{scale.name} Scale",
+        "Choices": {
+            str(i + 1): {"Display": s} for i, s in enumerate(scale.statements)
+        },
+        "ChoiceOrder": [str(i + 1) for i in range(n)],
+        "Answers": {
+            str(i + 1): {"Display": LIKERT_7POINT[i]} for i in range(7)
+        },
+        "AnswerOrder": [str(i + 1) for i in range(7)],
+        "ChoiceDataExportTags": False,
+        "Validation": {"Settings": {"ForceResponse": "ON", "Type": "None"}},
+        "Language": [],
+        "QuestionID": qid,
+    }
+    if scale.reverse_indices:
+        payload["RecodeValues"] = {
+            str(i): str(8 - i) if i in scale.reverse_indices else str(i)
+            for i in range(1, n + 1)
+        }
+    return {
+        "SurveyID": survey_id,
+        "Element": "SQ",
+        "PrimaryAttribute": qid,
+        "SecondaryAttribute": f"{scale.name} Matrix",
         "TertiaryAttribute": None,
         "Payload": payload,
     }

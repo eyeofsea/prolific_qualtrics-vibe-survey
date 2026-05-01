@@ -89,3 +89,35 @@ def test_demographics_three_types():
     assert by_id["QID_DEMO_3"]["Payload"]["QuestionType"] == "TE"
     assert by_id["QID_DEMO_1"]["Payload"]["Choices"]["1"]["Display"] == "20대"
     assert by_id["QID_DEMO_1"]["Payload"]["DataExportTag"] == "Q_DEMO_1"
+
+
+def test_single_matrix_scale_with_arbitrary_name_and_reverse():
+    survey = _minimal_survey().model_copy(update={
+        "scales": [
+            Scale(
+                name="WBI",  # arbitrary, not from {AS,RC,ID,DV,HCD}
+                anchor="7-point Likert",
+                statements=["나는 빠르게 적응한다.", "변화가 두렵다.", "기회를 만든다."],
+                reverse_indices=[2],
+            ),
+        ],
+    })
+    qsf = build_qsf(survey)
+    scale = next(
+        (e for e in qsf["SurveyElements"]
+         if e.get("PrimaryAttribute") == "QID_SCALE_1"),
+        None,
+    )
+    assert scale is not None
+    p = scale["Payload"]
+    assert p["QuestionType"] == "Matrix"
+    assert p["Selector"] == "Likert"
+    assert p["SubSelector"] == "SingleAnswer"
+    assert p["DataExportTag"] == "Q_SCALE_1"  # stable index, not name
+    assert p["QuestionDescription"] == "WBI Scale"  # name reflected here
+    assert len(p["Choices"]) == 3
+    assert p["Choices"]["1"]["Display"] == "나는 빠르게 적응한다."
+    assert len(p["Answers"]) == 7
+    assert p["Answers"]["1"]["Display"] == "전혀 동의하지 않는다"
+    assert p["Answers"]["7"]["Display"] == "매우 동의한다"
+    assert p["RecodeValues"] == {"1": "1", "2": "6", "3": "3"}
