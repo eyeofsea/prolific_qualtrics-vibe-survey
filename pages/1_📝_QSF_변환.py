@@ -2,6 +2,8 @@ import json
 
 import streamlit as st
 
+from lib import secrets as sec
+from lib.llm import LLMError, freeform_to_markdown
 from lib.qsf import parse_text
 from lib.qsf_builder import build_qsf
 from lib.validate import QSFValidator
@@ -39,7 +41,54 @@ EXPECTED: 5
 COMPLETION_CODE: ABC12345
 """
 
-raw = st.text_area("설문 텍스트 붙여넣기", height=400, placeholder=PLACEHOLDER)
+with st.expander("✨ 자유형 텍스트로 시작 (LLM 정규화)", expanded=False):
+    st.caption(
+        "원하는 설문을 자유롭게 적으면 LLM이 위 마크다운 형식으로 변환합니다. "
+        "LLM이 척도명도 설문 주제에 맞게 자유롭게 지정합니다 (최대 7개). "
+        "변환 결과는 textarea에 채워지며 직접 편집 가능합니다."
+    )
+    api_key = sec.get_llm_api_key()
+    if not api_key:
+        st.warning(
+            "API Key가 설정되어 있지 않습니다. 좌측 메뉴 '설정' 페이지에서 등록하세요."
+        )
+    freeform = st.text_area(
+        "자유형 텍스트",
+        height=200,
+        placeholder=(
+            "예: 직장인 회복탄력성을 7점 척도로 측정. "
+            "회복탄력성·적응성·인내심 척도, 인구통계 3개, 주의검사 포함."
+        ),
+        key="freeform_input",
+    )
+    if st.button(
+        "LLM으로 변환",
+        disabled=not (api_key and freeform.strip()),
+        key="llm_convert_btn",
+    ):
+        with st.spinner("LLM 호출 중..."):
+            try:
+                md = freeform_to_markdown(
+                    freeform,
+                    api_key=api_key,
+                    provider_override=state.get(state.LLM_PROVIDER_OVERRIDE),
+                )
+            except LLMError as e:
+                st.error(f"LLM 호출 실패: {e}")
+            else:
+                st.session_state["llm_generated_markdown"] = md
+                st.success(
+                    "변환 완료. 아래 textarea에 채워졌습니다. "
+                    "검토 후 '변환 + 검증'을 누르세요."
+                )
+                st.rerun()
+
+raw = st.text_area(
+    "설문 텍스트 붙여넣기",
+    value=st.session_state.get("llm_generated_markdown", ""),
+    height=400,
+    placeholder=PLACEHOLDER,
+)
 
 if st.button("변환 + 검증", type="primary"):
     try:
