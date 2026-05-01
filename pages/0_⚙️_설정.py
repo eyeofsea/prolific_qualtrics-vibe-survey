@@ -33,14 +33,12 @@ with col1:
             st.error(str(e))
         else:
             sec.set_llm_api_key(new_key)
-            state.set_(state.LLM_API_KEY, new_key)
             state.set_(state.LLM_PROVIDER_OVERRIDE, None)
             st.success(f"저장됨. 감지된 provider: **{provider}**")
             st.rerun()
 with col2:
     if st.button("삭제", disabled=current is None):
         sec.delete_llm_api_key()
-        state.set_(state.LLM_API_KEY, None)
         st.success("삭제됨.")
         st.rerun()
 

@@ -158,6 +158,10 @@ LIKERT_7POINT = [
 
 
 def _build_scale_sq(survey_id: str, scale: Scale, idx: int) -> dict:
+    # Qualtrics Matrix RecodeValues operates on Answer columns (the 1-7 Likert
+    # points) globally for all rows, so it cannot express per-row reversal.
+    # We carry [REVERSE] markers through to QuestionDescription only; researchers
+    # apply the 8-x flip in their analysis pipeline (R/SPSS/pandas).
     qid = f"QID_SCALE_{idx}"
     n = len(scale.statements)
     invalid = [i for i in scale.reverse_indices if i < 1 or i > n]
@@ -166,6 +170,10 @@ def _build_scale_sq(survey_id: str, scale: Scale, idx: int) -> dict:
             f"SCALE '{scale.name}' REVERSE index 범위 초과: {invalid} "
             f"(statements {n}개)"
         )
+    desc = f"{scale.name} Scale"
+    if scale.reverse_indices:
+        rev = ",".join(str(i) for i in scale.reverse_indices)
+        desc = f"{desc} [REVERSE: {rev}]"
     payload: dict = {
         "QuestionText": "다음 진술에 동의하시는 정도를 표시해 주세요.",
         "DataExportTag": f"Q_SCALE_{idx}",
@@ -180,7 +188,7 @@ def _build_scale_sq(survey_id: str, scale: Scale, idx: int) -> dict:
             "WhiteSpace": "ON",
             "MobileFirst": True,
         },
-        "QuestionDescription": f"{scale.name} Scale",
+        "QuestionDescription": desc,
         "Choices": {
             str(i + 1): {"Display": s} for i, s in enumerate(scale.statements)
         },
@@ -194,11 +202,6 @@ def _build_scale_sq(survey_id: str, scale: Scale, idx: int) -> dict:
         "Language": [],
         "QuestionID": qid,
     }
-    if scale.reverse_indices:
-        payload["RecodeValues"] = {
-            str(i): str(8 - i) if i in scale.reverse_indices else str(i)
-            for i in range(1, n + 1)
-        }
     return {
         "SurveyID": survey_id,
         "Element": "SQ",

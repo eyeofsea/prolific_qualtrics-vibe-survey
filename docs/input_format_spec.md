@@ -54,6 +54,7 @@ TYPE: SingleChoice
 - SCALE 수는 최대 7개
 - `ANCHOR:` 한 줄로 anchor 지정 (예: `7-point Likert`)
 - `- 문항. [REVERSE]` 표기 시 그 번호가 `reverse_indices`에 추가
+- **역코딩(reverse-scoring)은 후처리(post-hoc)**: Qualtrics Matrix의 `RecodeValues`는 행(문항)별 역방향을 표현할 수 없어 QSF에는 마커만 남깁니다. 빌더는 `[REVERSE]` 정보를 `QuestionDescription`에 `"<name> Scale [REVERSE: 2,4]"` 형식으로 기록하므로, 연구자는 CSV export 후 R/SPSS/pandas에서 해당 문항에 `8 - x` 변환을 직접 적용해야 합니다.
 
 ```
 ## SCALE: AS

@@ -115,13 +115,15 @@ def test_single_matrix_scale_with_arbitrary_name_and_reverse():
     assert p["Selector"] == "Likert"
     assert p["SubSelector"] == "SingleAnswer"
     assert p["DataExportTag"] == "Q_SCALE_1"  # stable index, not name
-    assert p["QuestionDescription"] == "WBI Scale"  # name reflected here
+    # Reverse markers surface in QuestionDescription only; reverse-scoring
+    # is post-hoc (Qualtrics Matrix RecodeValues cannot express per-row reversal).
+    assert p["QuestionDescription"] == "WBI Scale [REVERSE: 2]"
     assert len(p["Choices"]) == 3
     assert p["Choices"]["1"]["Display"] == "나는 빠르게 적응한다."
     assert len(p["Answers"]) == 7
     assert p["Answers"]["1"]["Display"] == "전혀 동의하지 않는다"
     assert p["Answers"]["7"]["Display"] == "매우 동의한다"
-    assert p["RecodeValues"] == {"1": "1", "2": "6", "3": "3"}
+    assert "RecodeValues" not in p
 
 
 def test_seven_scales_with_mixed_names_supported():

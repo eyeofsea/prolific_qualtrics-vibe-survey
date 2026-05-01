@@ -12,7 +12,9 @@ STUDY_TITLE = "study_title"
 EXPECTED_MINUTES = "expected_minutes"
 SCALES_SUMMARY = "scales_summary"
 PROLIFIC_API_KEY = "prolific_api_key"
-LLM_API_KEY = "llm_api_key"
+# LLM API key lives in OS keyring (lib.secrets) — single source of truth, no
+# session mirror. Provider override stays in session state because it is a
+# transient UI choice that should not persist across sessions.
 LLM_PROVIDER_OVERRIDE = "llm_provider_override"
 
 
@@ -22,7 +24,6 @@ DEFAULTS: dict[str, Any] = {
     EXPECTED_MINUTES: 8,
     SCALES_SUMMARY: None,
     PROLIFIC_API_KEY: None,
-    LLM_API_KEY: None,
     LLM_PROVIDER_OVERRIDE: None,
 }
 

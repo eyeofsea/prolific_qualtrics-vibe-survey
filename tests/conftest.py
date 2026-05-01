@@ -1,16 +1,6 @@
-"""Common fixtures: load standard template once."""
+"""Shared pytest fixtures.
 
-import json
-from pathlib import Path
-
-import pytest
-
-
-REPO_ROOT = Path(__file__).parent.parent
-TEMPLATE_PATH = REPO_ROOT / "templates" / "standard.qsf"
-
-
-@pytest.fixture
-def template() -> dict:
-    with open(TEMPLATE_PATH, encoding="utf-8") as f:
-        return json.load(f)
+The `templates/standard.qsf` file is kept in the repo as a schema reference
+only — it is never loaded at runtime now that `lib.qsf_builder` constructs
+QSF dicts from scratch. No fixtures load it.
+"""
