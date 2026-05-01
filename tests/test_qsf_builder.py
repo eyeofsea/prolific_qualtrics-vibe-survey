@@ -146,3 +146,29 @@ def test_no_scales_produces_zero_scale_sqs():
     scale_qids = [e for e in qsf["SurveyElements"]
                   if e.get("PrimaryAttribute", "").startswith("QID_SCALE_")]
     assert scale_qids == []
+
+
+def test_attention_check_present_when_provided():
+    survey = _minimal_survey().model_copy(update={
+        "attention_check": AttentionCheck(text="5번을 선택하세요.", expected=5),
+    })
+    qsf = build_qsf(survey)
+    att = next(
+        (e for e in qsf["SurveyElements"]
+         if e.get("PrimaryAttribute") == "QID_ATTENTION"),
+        None,
+    )
+    assert att is not None
+    p = att["Payload"]
+    assert p["QuestionType"] == "MC"
+    assert p["Selector"] == "SAVR"
+    assert p["QuestionText"] == "5번을 선택하세요."
+    assert p["AttentionExpected"] == 5
+    assert len(p["Choices"]) == 7
+
+
+def test_attention_check_absent_when_none():
+    qsf = build_qsf(_minimal_survey())  # attention_check=None
+    att = [e for e in qsf["SurveyElements"]
+           if e.get("PrimaryAttribute") == "QID_ATTENTION"]
+    assert att == []

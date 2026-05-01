@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from lib.qsf import Question, Scale, SurveyInput
+from lib.qsf import AttentionCheck, Question, Scale, SurveyInput
 
 
 def _new_survey_id() -> str:
@@ -19,6 +19,8 @@ def build_qsf(survey: SurveyInput) -> dict:
         elements.append(_build_demo_sq(survey_id, q, i))
     for i, s in enumerate(survey.scales, start=1):
         elements.append(_build_scale_sq(survey_id, s, i))
+    if survey.attention_check is not None:
+        elements.append(_build_attention_sq(survey_id, survey.attention_check))
     return {
         "SurveyEntry": _build_survey_entry(survey_id, survey.title),
         "SurveyElements": elements,
@@ -200,4 +202,40 @@ def _build_scale_sq(survey_id: str, scale: Scale, idx: int) -> dict:
         "SecondaryAttribute": f"{scale.name} Matrix",
         "TertiaryAttribute": None,
         "Payload": payload,
+    }
+
+
+_ATTENTION_CHOICES = {
+    "1": {"Display": "1 (전혀 동의하지 않는다)"},
+    "2": {"Display": "2"},
+    "3": {"Display": "3"},
+    "4": {"Display": "4 (보통이다)"},
+    "5": {"Display": "5 (약간 동의한다)"},
+    "6": {"Display": "6"},
+    "7": {"Display": "7 (매우 동의한다)"},
+}
+
+
+def _build_attention_sq(survey_id: str, attn: AttentionCheck) -> dict:
+    return {
+        "SurveyID": survey_id,
+        "Element": "SQ",
+        "PrimaryAttribute": "QID_ATTENTION",
+        "SecondaryAttribute": "Attention check",
+        "TertiaryAttribute": None,
+        "Payload": {
+            "QuestionText": attn.text,
+            "DataExportTag": "Q_ATTENTION",
+            "QuestionType": "MC",
+            "Selector": "SAVR",
+            "SubSelector": "TX",
+            "Configuration": {"QuestionDescriptionOption": "UseText"},
+            "QuestionDescription": "Attention check",
+            "Choices": dict(_ATTENTION_CHOICES),
+            "ChoiceOrder": [str(i) for i in range(1, 8)],
+            "Validation": {"Settings": {"ForceResponse": "ON", "Type": "None"}},
+            "Language": [],
+            "QuestionID": "QID_ATTENTION",
+            "AttentionExpected": attn.expected,
+        },
     }
