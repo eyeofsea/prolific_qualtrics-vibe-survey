@@ -1,9 +1,9 @@
 import json
-from pathlib import Path
 
 import streamlit as st
 
-from lib.qsf import parse_text, inject_into_template
+from lib.qsf import parse_text
+from lib.qsf_builder import build_qsf
 from lib.validate import QSFValidator
 from shared import state
 
@@ -44,11 +44,8 @@ raw = st.text_area("설문 텍스트 붙여넣기", height=400, placeholder=PLAC
 if st.button("변환 + 검증", type="primary"):
     try:
         survey = parse_text(raw)
-        template_path = Path(__file__).parent.parent / "templates" / "standard.qsf"
-        with open(template_path, encoding="utf-8") as f:
-            template = json.load(f)
-        qsf = inject_into_template(survey, template)
-        report = QSFValidator(qsf, template=template).run()
+        qsf = build_qsf(survey)
+        report = QSFValidator(qsf).run()
 
         st.subheader("검증 리포트")
         if report.is_blocked:
