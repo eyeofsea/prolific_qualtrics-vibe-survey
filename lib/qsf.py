@@ -218,9 +218,9 @@ def parse_text(raw: str) -> SurveyInput:
         elif header == "END":
             completion_code = _parse_end(body)
 
-    if len(scales) > 5:
+    if len(scales) > 7:
         raise ValueError(
-            f"SCALE 은 최대 5개. 입력 {len(scales)}개."
+            f"SCALE 은 최대 7개. 입력 {len(scales)}개."
         )
     if not consent_text:
         raise ValueError("'## CONSENT' 섹션이 비어 있음.")

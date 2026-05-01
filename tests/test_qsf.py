@@ -352,3 +352,21 @@ def test_inject_no_attention_drops_block(template):
     )["Payload"]
     block_ids = {b["ID"] for b in blocks}
     assert "BL_ATTENTION" not in block_ids
+
+
+def test_seven_scales_allowed():
+    text = "# SURVEY: x\n## CONSENT\n" + ("a" * 100) + "\n"
+    for i in range(1, 8):
+        text += f"## SCALE: S{i}\nANCHOR: Likert\n- item\n"
+    text += "## END\nCOMPLETION_CODE: ABC123\n"
+    survey = parse_text(text)
+    assert len(survey.scales) == 7
+
+
+def test_eight_scales_rejected():
+    text = "# SURVEY: x\n## CONSENT\n" + ("a" * 100) + "\n"
+    for i in range(1, 9):
+        text += f"## SCALE: S{i}\nANCHOR: Likert\n- item\n"
+    text += "## END\nCOMPLETION_CODE: ABC123\n"
+    with pytest.raises(ValueError, match="최대 7"):
+        parse_text(text)
