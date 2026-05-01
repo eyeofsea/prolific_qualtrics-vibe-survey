@@ -13,7 +13,9 @@ def _new_survey_id() -> str:
 
 def build_qsf(survey: SurveyInput) -> dict:
     survey_id = _new_survey_id()
-    elements: list[dict] = [_build_survey_options(survey_id)]
+    elements: list[dict] = []
+    elements.append(_build_blocks(survey_id, survey))
+    elements.append(_build_survey_options(survey_id))
     elements.append(_build_consent_sq(survey_id, survey.consent_text))
     for i, q in enumerate(survey.demographics, start=1):
         elements.append(_build_demo_sq(survey_id, q, i))
@@ -265,4 +267,51 @@ def _build_end_sq(survey_id: str, code: str) -> dict:
             "Language": [],
             "QuestionID": "QID_END",
         },
+    }
+
+
+def _build_blocks(survey_id: str, survey: SurveyInput) -> dict:
+    blocks: list[dict] = []
+    blocks.append({
+        "Type": "Standard",
+        "Description": "Consent",
+        "ID": "BL_CONSENT",
+        "BlockElements": [{"Type": "Question", "QuestionID": "QID_CONSENT"}],
+    })
+    blocks.append({
+        "Type": "Standard",
+        "Description": "Demographics",
+        "ID": "BL_DEMOGRAPHICS",
+        "BlockElements": [
+            {"Type": "Question", "QuestionID": f"QID_DEMO_{i}"}
+            for i in range(1, len(survey.demographics) + 1)
+        ],
+    })
+    for i, s in enumerate(survey.scales, start=1):
+        blocks.append({
+            "Type": "Standard",
+            "Description": f"{s.name} Scale",
+            "ID": f"BL_SCALE_{i}",
+            "BlockElements": [{"Type": "Question", "QuestionID": f"QID_SCALE_{i}"}],
+        })
+    if survey.attention_check is not None:
+        blocks.append({
+            "Type": "Standard",
+            "Description": "Attention Check",
+            "ID": "BL_ATTENTION",
+            "BlockElements": [{"Type": "Question", "QuestionID": "QID_ATTENTION"}],
+        })
+    blocks.append({
+        "Type": "Standard",
+        "Description": "End",
+        "ID": "BL_END",
+        "BlockElements": [{"Type": "Question", "QuestionID": "QID_END"}],
+    })
+    return {
+        "SurveyID": survey_id,
+        "Element": "BL",
+        "PrimaryAttribute": "Survey Blocks",
+        "SecondaryAttribute": None,
+        "TertiaryAttribute": None,
+        "Payload": blocks,
     }

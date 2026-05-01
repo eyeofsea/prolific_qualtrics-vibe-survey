@@ -186,3 +186,40 @@ def test_end_question_contains_completion_code():
     assert "ABC12345" in text
     assert "코드" in text
     assert end["Payload"]["QuestionType"] == "DB"
+
+
+def test_blocks_for_minimal_survey():
+    qsf = build_qsf(_minimal_survey())
+    bl = _find_element(qsf, "BL", "Survey Blocks")
+    assert bl is not None
+    block_ids = [b["ID"] for b in bl["Payload"]]
+    assert block_ids == ["BL_CONSENT", "BL_DEMOGRAPHICS", "BL_END"]
+
+
+def test_blocks_with_scales_and_attention():
+    survey = _minimal_survey().model_copy(update={
+        "demographics": [Question(text="Q?", type="Text", choices=[])],
+        "scales": [
+            Scale(name="WBI", anchor="7-point Likert",
+                  statements=["a"], reverse_indices=[]),
+            Scale(name="Resilience", anchor="7-point Likert",
+                  statements=["b"], reverse_indices=[]),
+        ],
+        "attention_check": AttentionCheck(text="t", expected=5),
+    })
+    qsf = build_qsf(survey)
+    bl = _find_element(qsf, "BL", "Survey Blocks")
+    block_ids = [b["ID"] for b in bl["Payload"]]
+    assert block_ids == [
+        "BL_CONSENT",
+        "BL_DEMOGRAPHICS",
+        "BL_SCALE_1",
+        "BL_SCALE_2",
+        "BL_ATTENTION",
+        "BL_END",
+    ]
+    demo_block = next(b for b in bl["Payload"] if b["ID"] == "BL_DEMOGRAPHICS")
+    assert demo_block["BlockElements"] == [{"Type": "Question", "QuestionID": "QID_DEMO_1"}]
+    scale1_block = next(b for b in bl["Payload"] if b["ID"] == "BL_SCALE_1")
+    assert scale1_block["Description"] == "WBI Scale"
+    assert scale1_block["BlockElements"] == [{"Type": "Question", "QuestionID": "QID_SCALE_1"}]
