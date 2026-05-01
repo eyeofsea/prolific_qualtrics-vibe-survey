@@ -1,4 +1,13 @@
-"""Build a complete QSF dict from a SurveyInput. No template file required."""
+"""Build a complete QSF dict from a SurveyInput. No template file required.
+
+The output mirrors what Qualtrics itself emits: SurveyElements include not only
+BL/FL/SO/SQ but also RS (response set), PROJ (project), SCO (scoring), STAT
+(statistics) and QC (question count). Block payload is a dict keyed by string
+indices ("0", "1", ...) — Qualtrics rejects list-shaped block payloads on import.
+ChoiceOrder/AnswerOrder use integers; questions carry the bookkeeping fields
+(DataVisibility, DefaultChoices, GradingData, NextChoiceId, NextAnswerId) that
+Qualtrics writes on every export.
+"""
 
 from __future__ import annotations
 
@@ -8,16 +17,27 @@ from lib.qsf import AttentionCheck, Question, Scale, SurveyInput
 
 
 def _new_survey_id() -> str:
-    return "SV_" + uuid.uuid4().hex[:14].upper()
+    return "SV_" + uuid.uuid4().hex[:14]
+
+
+def _new_response_set_id() -> str:
+    return "RS_" + uuid.uuid4().hex[:14]
 
 
 def build_qsf(survey: SurveyInput) -> dict:
     survey_id = _new_survey_id()
-    elements: list[dict] = []
-    elements.append(_build_blocks(survey_id, survey))
-    elements.append(_build_flow(survey_id, survey))
-    elements.append(_build_survey_options(survey_id))
-    elements.append(_build_consent_sq(survey_id, survey.consent_text))
+    rs_id = _new_response_set_id()
+    elements: list[dict] = [
+        _build_blocks(survey_id, survey),
+        _build_flow(survey_id, survey),
+        _build_response_set(survey_id, rs_id),
+        _build_question_count(survey_id),
+        _build_survey_options(survey_id),
+        _build_survey_statistics(survey_id),
+        _build_project(survey_id),
+        _build_scoring(survey_id),
+        _build_consent_sq(survey_id, survey.consent_text),
+    ]
     for i, q in enumerate(survey.demographics, start=1):
         elements.append(_build_demo_sq(survey_id, q, i))
     for i, s in enumerate(survey.scales, start=1):
@@ -26,12 +46,12 @@ def build_qsf(survey: SurveyInput) -> dict:
         elements.append(_build_attention_sq(survey_id, survey.attention_check))
     elements.append(_build_end_sq(survey_id, survey.completion_code))
     return {
-        "SurveyEntry": _build_survey_entry(survey_id, survey.title),
+        "SurveyEntry": _build_survey_entry(survey_id, rs_id, survey.title),
         "SurveyElements": elements,
     }
 
 
-def _build_survey_entry(survey_id: str, title: str) -> dict:
+def _build_survey_entry(survey_id: str, rs_id: str, title: str) -> dict:
     return {
         "SurveyID": survey_id,
         "SurveyName": title,
@@ -40,7 +60,7 @@ def _build_survey_entry(survey_id: str, title: str) -> dict:
         "SurveyBrandID": "generated",
         "DivisionID": None,
         "SurveyLanguage": "KO",
-        "SurveyActiveResponseSet": "RS_GENERATED",
+        "SurveyActiveResponseSet": rs_id,
         "SurveyStatus": "Inactive",
         "SurveyStartDate": "0000-00-00 00:00:00",
         "SurveyExpirationDate": "0000-00-00 00:00:00",
@@ -50,6 +70,69 @@ def _build_survey_entry(survey_id: str, title: str) -> dict:
         "LastAccessed": "0000-00-00 00:00:00",
         "LastActivated": "0000-00-00 00:00:00",
         "Deleted": None,
+    }
+
+
+def _build_response_set(survey_id: str, rs_id: str) -> dict:
+    return {
+        "SurveyID": survey_id,
+        "Element": "RS",
+        "PrimaryAttribute": rs_id,
+        "SecondaryAttribute": "Default Response Set",
+        "TertiaryAttribute": None,
+        "Payload": None,
+    }
+
+
+def _build_question_count(survey_id: str) -> dict:
+    return {
+        "SurveyID": survey_id,
+        "Element": "QC",
+        "PrimaryAttribute": "Survey Question Count",
+        "SecondaryAttribute": None,
+        "TertiaryAttribute": None,
+        "Payload": None,
+    }
+
+
+def _build_survey_statistics(survey_id: str) -> dict:
+    return {
+        "SurveyID": survey_id,
+        "Element": "STAT",
+        "PrimaryAttribute": "Survey Statistics",
+        "SecondaryAttribute": None,
+        "TertiaryAttribute": None,
+        "Payload": {"MobileCompatible": True, "ID": "Survey Statistics"},
+    }
+
+
+def _build_project(survey_id: str) -> dict:
+    return {
+        "SurveyID": survey_id,
+        "Element": "PROJ",
+        "PrimaryAttribute": "CORE",
+        "SecondaryAttribute": "1.1.0",
+        "TertiaryAttribute": None,
+        "Payload": {"ProjectCategory": "CORE", "SchemaVersion": "1.1.0"},
+    }
+
+
+def _build_scoring(survey_id: str) -> dict:
+    return {
+        "SurveyID": survey_id,
+        "Element": "SCO",
+        "PrimaryAttribute": "Scoring",
+        "SecondaryAttribute": None,
+        "TertiaryAttribute": None,
+        "Payload": {
+            "ScoringCategories": [],
+            "ScoringCategoryGroups": [],
+            "ScoringSummaryCategory": None,
+            "ScoringSummaryAfterQuestions": 0,
+            "ScoringSummaryAfterSurvey": 0,
+            "DefaultScoringCategory": None,
+            "AutoScoringCategory": None,
+        },
     }
 
 
@@ -73,7 +156,7 @@ def _build_survey_options(survey_id: str) -> dict:
             "Footer": "",
             "ProgressBarDisplay": "VerboseText",
             "PartialData": "+1 week",
-            "ValidationMessage": "",
+            "ValidationMessage": None,
             "PreviousButton": "",
             "NextButton": "",
             "SkinLibrary": "qualtrics",
@@ -84,24 +167,46 @@ def _build_survey_options(survey_id: str) -> dict:
     }
 
 
+def _common_q_fields(qid: str, n_choices: int = 0, n_answers: int = 0) -> dict:
+    """Bookkeeping fields Qualtrics writes on every question payload."""
+    return {
+        "DefaultChoices": False,
+        "DataVisibility": {"Private": False, "Hidden": False},
+        "GradingData": [],
+        "NextChoiceId": n_choices + 1,
+        "NextAnswerId": n_answers + 1,
+        "QuestionID": qid,
+    }
+
+
+_FORCE_RESPONSE_ON = {
+    "Settings": {"ForceResponse": "ON", "ForceResponseType": "ON", "Type": "None"},
+}
+_FORCE_RESPONSE_OFF = {
+    "Settings": {"ForceResponse": "OFF", "Type": "None"},
+}
+
+
 def _build_consent_sq(survey_id: str, consent_text: str) -> dict:
+    qid = "QID_CONSENT"
+    payload: dict = {
+        "QuestionText": consent_text,
+        "DataExportTag": "Q_CONSENT",
+        "QuestionType": "DB",
+        "Selector": "TB",
+        "Configuration": {"QuestionDescriptionOption": "UseText"},
+        "QuestionDescription": "Consent",
+        "Validation": _FORCE_RESPONSE_OFF,
+        "Language": [],
+    }
+    payload.update(_common_q_fields(qid))
     return {
         "SurveyID": survey_id,
         "Element": "SQ",
-        "PrimaryAttribute": "QID_CONSENT",
+        "PrimaryAttribute": qid,
         "SecondaryAttribute": "Consent text",
         "TertiaryAttribute": None,
-        "Payload": {
-            "QuestionText": consent_text,
-            "DataExportTag": "Q_CONSENT",
-            "QuestionType": "DB",
-            "Selector": "TB",
-            "Configuration": {"QuestionDescriptionOption": "UseText"},
-            "QuestionDescription": "Consent",
-            "Validation": {"Settings": {"ForceResponse": "OFF", "Type": "None"}},
-            "Language": [],
-            "QuestionID": "QID_CONSENT",
-        },
+        "Payload": payload,
     }
 
 
@@ -125,9 +230,8 @@ def _build_demo_sq(survey_id: str, q: Question, idx: int) -> dict:
         "Selector": selector,
         "Configuration": {"QuestionDescriptionOption": "UseText"},
         "QuestionDescription": q.text[:60],
-        "Validation": {"Settings": {"ForceResponse": "ON", "Type": "None"}},
+        "Validation": _FORCE_RESPONSE_ON,
         "Language": [],
-        "QuestionID": qid,
     }
     if sub is not None:
         payload["SubSelector"] = sub
@@ -135,7 +239,8 @@ def _build_demo_sq(survey_id: str, q: Question, idx: int) -> dict:
         payload["Choices"] = {
             str(i + 1): {"Display": c} for i, c in enumerate(q.choices)
         }
-        payload["ChoiceOrder"] = [str(i + 1) for i in range(len(q.choices))]
+        payload["ChoiceOrder"] = list(range(1, len(q.choices) + 1))
+    payload.update(_common_q_fields(qid, n_choices=len(q.choices)))
     return {
         "SurveyID": survey_id,
         "Element": "SQ",
@@ -185,23 +290,23 @@ def _build_scale_sq(survey_id: str, scale: Scale, idx: int) -> dict:
             "TextPosition": "inline",
             "ChoiceColumnWidth": 25,
             "RepeatHeaders": "none",
-            "WhiteSpace": "ON",
+            "WhiteSpace": "OFF",
             "MobileFirst": True,
         },
         "QuestionDescription": desc,
         "Choices": {
             str(i + 1): {"Display": s} for i, s in enumerate(scale.statements)
         },
-        "ChoiceOrder": [str(i + 1) for i in range(n)],
+        "ChoiceOrder": list(range(1, n + 1)),
         "Answers": {
             str(i + 1): {"Display": LIKERT_7POINT[i]} for i in range(7)
         },
-        "AnswerOrder": [str(i + 1) for i in range(7)],
+        "AnswerOrder": list(range(1, 8)),
         "ChoiceDataExportTags": False,
-        "Validation": {"Settings": {"ForceResponse": "ON", "Type": "None"}},
+        "Validation": _FORCE_RESPONSE_ON,
         "Language": [],
-        "QuestionID": qid,
     }
+    payload.update(_common_q_fields(qid, n_choices=n, n_answers=7))
     return {
         "SurveyID": survey_id,
         "Element": "SQ",
@@ -224,100 +329,96 @@ _ATTENTION_CHOICES = {
 
 
 def _build_attention_sq(survey_id: str, attn: AttentionCheck) -> dict:
+    qid = "QID_ATTENTION"
+    payload: dict = {
+        "QuestionText": attn.text,
+        "DataExportTag": "Q_ATTENTION",
+        "QuestionType": "MC",
+        "Selector": "SAVR",
+        "SubSelector": "TX",
+        "Configuration": {"QuestionDescriptionOption": "UseText"},
+        "QuestionDescription": "Attention check",
+        "Choices": dict(_ATTENTION_CHOICES),
+        "ChoiceOrder": list(range(1, 8)),
+        "Validation": _FORCE_RESPONSE_ON,
+        "Language": [],
+        "AttentionExpected": attn.expected,
+    }
+    payload.update(_common_q_fields(qid, n_choices=7))
     return {
         "SurveyID": survey_id,
         "Element": "SQ",
-        "PrimaryAttribute": "QID_ATTENTION",
+        "PrimaryAttribute": qid,
         "SecondaryAttribute": "Attention check",
         "TertiaryAttribute": None,
-        "Payload": {
-            "QuestionText": attn.text,
-            "DataExportTag": "Q_ATTENTION",
-            "QuestionType": "MC",
-            "Selector": "SAVR",
-            "SubSelector": "TX",
-            "Configuration": {"QuestionDescriptionOption": "UseText"},
-            "QuestionDescription": "Attention check",
-            "Choices": dict(_ATTENTION_CHOICES),
-            "ChoiceOrder": [str(i) for i in range(1, 8)],
-            "Validation": {"Settings": {"ForceResponse": "ON", "Type": "None"}},
-            "Language": [],
-            "QuestionID": "QID_ATTENTION",
-            "AttentionExpected": attn.expected,
-        },
+        "Payload": payload,
     }
 
 
 def _build_end_sq(survey_id: str, code: str) -> dict:
+    qid = "QID_END"
     text = (
         f"설문에 참여해 주셔서 감사합니다.\n\n"
         f"Prolific Completion Code: {code}\n\n"
         f"위 코드를 Prolific에 입력하셔야 보상이 지급됩니다."
     )
+    payload: dict = {
+        "QuestionText": text,
+        "DataExportTag": "Q_END",
+        "QuestionType": "DB",
+        "Selector": "TB",
+        "Configuration": {"QuestionDescriptionOption": "UseText"},
+        "QuestionDescription": "End",
+        "Validation": _FORCE_RESPONSE_OFF,
+        "Language": [],
+    }
+    payload.update(_common_q_fields(qid))
     return {
         "SurveyID": survey_id,
         "Element": "SQ",
-        "PrimaryAttribute": "QID_END",
+        "PrimaryAttribute": qid,
         "SecondaryAttribute": "End message",
         "TertiaryAttribute": None,
-        "Payload": {
-            "QuestionText": text,
-            "DataExportTag": "Q_END",
-            "QuestionType": "DB",
-            "Selector": "TB",
-            "Configuration": {"QuestionDescriptionOption": "UseText"},
-            "QuestionDescription": "End",
-            "Validation": {"Settings": {"ForceResponse": "OFF", "Type": "None"}},
-            "Language": [],
-            "QuestionID": "QID_END",
-        },
+        "Payload": payload,
+    }
+
+
+def _block(block_id: str, description: str, qids: list[str]) -> dict:
+    return {
+        "Type": "Standard",
+        "SubType": "",
+        "Description": description,
+        "ID": block_id,
+        "BlockElements": [
+            {"Type": "Question", "QuestionID": qid} for qid in qids
+        ],
     }
 
 
 def _build_blocks(survey_id: str, survey: SurveyInput) -> dict:
-    blocks: list[dict] = []
-    blocks.append({
-        "Type": "Standard",
-        "Description": "Consent",
-        "ID": "BL_CONSENT",
-        "BlockElements": [{"Type": "Question", "QuestionID": "QID_CONSENT"}],
-    })
-    blocks.append({
-        "Type": "Standard",
-        "Description": "Demographics",
-        "ID": "BL_DEMOGRAPHICS",
-        "BlockElements": [
-            {"Type": "Question", "QuestionID": f"QID_DEMO_{i}"}
-            for i in range(1, len(survey.demographics) + 1)
-        ],
-    })
+    blocks: list[dict] = [
+        _block("BL_CONSENT", "Consent", ["QID_CONSENT"]),
+        _block(
+            "BL_DEMOGRAPHICS",
+            "Demographics",
+            [f"QID_DEMO_{i}" for i in range(1, len(survey.demographics) + 1)],
+        ),
+    ]
     for i, s in enumerate(survey.scales, start=1):
-        blocks.append({
-            "Type": "Standard",
-            "Description": f"{s.name} Scale",
-            "ID": f"BL_SCALE_{i}",
-            "BlockElements": [{"Type": "Question", "QuestionID": f"QID_SCALE_{i}"}],
-        })
+        blocks.append(_block(f"BL_SCALE_{i}", f"{s.name} Scale", [f"QID_SCALE_{i}"]))
     if survey.attention_check is not None:
-        blocks.append({
-            "Type": "Standard",
-            "Description": "Attention Check",
-            "ID": "BL_ATTENTION",
-            "BlockElements": [{"Type": "Question", "QuestionID": "QID_ATTENTION"}],
-        })
-    blocks.append({
-        "Type": "Standard",
-        "Description": "End",
-        "ID": "BL_END",
-        "BlockElements": [{"Type": "Question", "QuestionID": "QID_END"}],
-    })
+        blocks.append(_block("BL_ATTENTION", "Attention Check", ["QID_ATTENTION"]))
+    blocks.append(_block("BL_END", "End", ["QID_END"]))
+    # Qualtrics expects the BL Payload as a dict keyed by stringified indices,
+    # not a list. List-shaped payloads are silently dropped on import.
+    payload = {str(i): block for i, block in enumerate(blocks)}
     return {
         "SurveyID": survey_id,
         "Element": "BL",
         "PrimaryAttribute": "Survey Blocks",
         "SecondaryAttribute": None,
         "TertiaryAttribute": None,
-        "Payload": blocks,
+        "Payload": payload,
     }
 
 

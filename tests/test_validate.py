@@ -111,7 +111,8 @@ def test_orphan_block_ref_pass(baseline_qsf):
 
 def test_orphan_question_ref_fail(baseline_qsf):
     blocks = next(e for e in baseline_qsf["SurveyElements"] if e["Element"] == "BL")
-    blocks["Payload"][0]["BlockElements"].append(
+    first_key = next(iter(blocks["Payload"]))
+    blocks["Payload"][first_key]["BlockElements"].append(
         {"Type": "Question", "QuestionID": "QID_GHOST"}
     )
     r = QSFValidator(baseline_qsf).run()
@@ -272,7 +273,8 @@ def test_duplicate_qid_pass(baseline_qsf):
 
 def test_empty_block_warn(baseline_qsf):
     blocks = next(e for e in baseline_qsf["SurveyElements"] if e["Element"] == "BL")
-    blocks["Payload"][0]["BlockElements"] = []
+    first_key = next(iter(blocks["Payload"]))
+    blocks["Payload"][first_key]["BlockElements"] = []
     r = QSFValidator(baseline_qsf).run()
     assert "EMPTY_BLOCK" in _codes(r)
 
@@ -286,12 +288,14 @@ def test_empty_block_pass(baseline_qsf):
 
 def test_unused_block_info(baseline_qsf):
     blocks = next(e for e in baseline_qsf["SurveyElements"] if e["Element"] == "BL")
-    blocks["Payload"].append({
+    next_key = str(len(blocks["Payload"]))
+    blocks["Payload"][next_key] = {
         "Type": "Standard",
+        "SubType": "",
         "ID": "BL_ORPHAN",
         "Description": "Orphan",
         "BlockElements": [],
-    })
+    }
     r = QSFValidator(baseline_qsf).run()
     assert "UNUSED_BLOCK" in _codes(r)
 

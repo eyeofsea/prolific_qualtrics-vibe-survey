@@ -89,6 +89,9 @@ class QSFValidator:
         payload = be.get("Payload", [])
         if isinstance(payload, list):
             return payload
+        if isinstance(payload, dict):
+            # Qualtrics emits BL Payload as a dict keyed by string indices.
+            return list(payload.values())
         return []
 
     def _all_questions(self) -> list[dict]:

@@ -195,7 +195,10 @@ def test_blocks_for_minimal_survey():
     qsf = build_qsf(_minimal_survey())
     bl = _find_element(qsf, "BL", "Survey Blocks")
     assert bl is not None
-    block_ids = [b["ID"] for b in bl["Payload"]]
+    # Qualtrics expects BL Payload as dict keyed by string indices ("0","1",...)
+    assert isinstance(bl["Payload"], dict)
+    blocks_in_order = [bl["Payload"][k] for k in sorted(bl["Payload"], key=int)]
+    block_ids = [b["ID"] for b in blocks_in_order]
     assert block_ids == ["BL_CONSENT", "BL_DEMOGRAPHICS", "BL_END"]
 
 
@@ -212,7 +215,9 @@ def test_blocks_with_scales_and_attention():
     })
     qsf = build_qsf(survey)
     bl = _find_element(qsf, "BL", "Survey Blocks")
-    block_ids = [b["ID"] for b in bl["Payload"]]
+    assert isinstance(bl["Payload"], dict)
+    blocks = list(bl["Payload"].values())
+    block_ids = [b["ID"] for b in blocks]
     assert block_ids == [
         "BL_CONSENT",
         "BL_DEMOGRAPHICS",
@@ -221,11 +226,14 @@ def test_blocks_with_scales_and_attention():
         "BL_ATTENTION",
         "BL_END",
     ]
-    demo_block = next(b for b in bl["Payload"] if b["ID"] == "BL_DEMOGRAPHICS")
+    demo_block = next(b for b in blocks if b["ID"] == "BL_DEMOGRAPHICS")
     assert demo_block["BlockElements"] == [{"Type": "Question", "QuestionID": "QID_DEMO_1"}]
-    scale1_block = next(b for b in bl["Payload"] if b["ID"] == "BL_SCALE_1")
+    scale1_block = next(b for b in blocks if b["ID"] == "BL_SCALE_1")
     assert scale1_block["Description"] == "WBI Scale"
     assert scale1_block["BlockElements"] == [{"Type": "Question", "QuestionID": "QID_SCALE_1"}]
+    # All blocks should carry SubType (Qualtrics emits this on every block).
+    for b in blocks:
+        assert "SubType" in b
 
 
 def test_survey_flow_has_prolific_pid_and_blocks_in_order():
@@ -280,3 +288,82 @@ def test_builder_output_passes_validator_with_zero_errors():
     assert report.errors == [], (
         f"errors: {[(e.code, e.message) for e in report.errors]}"
     )
+
+
+def test_required_top_level_elements_present():
+    """Qualtrics import requires RS, PROJ, SCO, STAT, QC alongside BL/FL/SO/SQ.
+    Without RS, SurveyActiveResponseSet is a dangling reference and import fails.
+    """
+    qsf = build_qsf(_minimal_survey())
+    elem_kinds = {e.get("Element") for e in qsf["SurveyElements"]}
+    assert {"BL", "FL", "SO", "RS", "PROJ", "SCO", "STAT", "QC"} <= elem_kinds
+
+
+def test_response_set_id_matches_survey_active_response_set():
+    qsf = build_qsf(_minimal_survey())
+    rs = _find_element(qsf, "RS", qsf["SurveyEntry"]["SurveyActiveResponseSet"])
+    assert rs is not None, (
+        "SurveyActiveResponseSet must reference a real RS element by id"
+    )
+    assert rs["Payload"] is None  # Qualtrics emits null Payload here
+
+
+def test_project_element_has_schema_version():
+    qsf = build_qsf(_minimal_survey())
+    proj = next(
+        (e for e in qsf["SurveyElements"] if e.get("Element") == "PROJ"),
+        None,
+    )
+    assert proj is not None
+    assert proj["Payload"]["SchemaVersion"] == "1.1.0"
+    assert proj["Payload"]["ProjectCategory"] == "CORE"
+
+
+def test_choice_and_answer_order_are_integers_not_strings():
+    """Qualtrics import expects ChoiceOrder/AnswerOrder as int lists; string
+    lists may be silently dropped or cause UI rendering failures.
+    """
+    survey = _minimal_survey().model_copy(update={
+        "demographics": [
+            Question(text="연령대?", type="SingleChoice",
+                     choices=["20대", "30대", "40대"]),
+        ],
+        "scales": [
+            Scale(name="WBI", anchor="7-point Likert",
+                  statements=["a", "b"], reverse_indices=[]),
+        ],
+        "attention_check": AttentionCheck(text="t", expected=5),
+    })
+    qsf = build_qsf(survey)
+    for el in qsf["SurveyElements"]:
+        if el.get("Element") != "SQ":
+            continue
+        p = el["Payload"]
+        if "ChoiceOrder" in p and p["ChoiceOrder"]:
+            assert all(isinstance(i, int) for i in p["ChoiceOrder"]), (
+                f"{p['QuestionID']}: ChoiceOrder must be int list, "
+                f"got {p['ChoiceOrder']}"
+            )
+        if "AnswerOrder" in p and p["AnswerOrder"]:
+            assert all(isinstance(i, int) for i in p["AnswerOrder"]), (
+                f"{p['QuestionID']}: AnswerOrder must be int list, "
+                f"got {p['AnswerOrder']}"
+            )
+
+
+def test_questions_carry_qualtrics_bookkeeping_fields():
+    """Every SQ Payload Qualtrics emits has these fields. Missing them risks
+    quirky import behavior or rejection.
+    """
+    qsf = build_qsf(_full_survey())
+    for el in qsf["SurveyElements"]:
+        if el.get("Element") != "SQ":
+            continue
+        p = el["Payload"]
+        qid = p["QuestionID"]
+        for field in ("DefaultChoices", "DataVisibility", "GradingData",
+                      "NextChoiceId", "NextAnswerId"):
+            assert field in p, f"{qid} missing {field}"
+        assert p["DataVisibility"] == {"Private": False, "Hidden": False}
+        assert p["GradingData"] == []
+        assert p["DefaultChoices"] is False
