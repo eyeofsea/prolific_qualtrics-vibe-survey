@@ -51,24 +51,66 @@ def _load_credentials() -> tuple[str | None, str | None]:
     return token, dc
 
 
+def _load_app_password() -> str | None:
+    """수업용 공유 비밀번호. secrets.toml 의 [auth] password 또는 환경변수."""
+    try:
+        if "auth" in st.secrets:
+            pw = st.secrets["auth"].get("password")
+            if pw:
+                return str(pw)
+    except (FileNotFoundError, KeyError, AttributeError):
+        pass
+    return os.environ.get("APP_PASSWORD") or None
+
+
+def _password_gate() -> bool:
+    """비밀번호가 설정되어 있으면 입력받아 검증. 없으면 통과."""
+    expected = _load_app_password()
+    if not expected:
+        return True
+    if st.session_state.get("auth_ok"):
+        return True
+    st.subheader("🔐 수업 비밀번호 입력")
+    st.caption(
+        "강사가 알려준 수업용 비밀번호를 입력하세요. 비밀번호는 한 번만 입력하면 됩니다."
+    )
+    with st.form("auth_gate"):
+        pw = st.text_input("비밀번호", type="password")
+        if st.form_submit_button("확인", type="primary"):
+            if pw == expected:
+                st.session_state["auth_ok"] = True
+                st.rerun()
+            else:
+                st.error("비밀번호가 일치하지 않습니다.")
+    return False
+
+
+if not _password_gate():
+    st.stop()
+
+
 api_token, data_center = _load_credentials()
 if not api_token or not data_center:
     st.error(
         "Qualtrics 인증 정보가 없습니다. `.streamlit/secrets.toml` 또는 환경변수에 "
-        "`QUALTRICS_API_TOKEN`, `QUALTRICS_DATA_CENTER`(예: `syd1`)를 설정하세요."
+        "`QUALTRICS_API_TOKEN`, `QUALTRICS_DATA_CENTER`(예: `hnd1`)를 설정하세요."
     )
     with st.expander("설정 예시"):
         st.code(
             """# .streamlit/secrets.toml
 [qualtrics]
 api_token = "YOUR_TOKEN"
-data_center = "syd1"
+data_center = "hnd1"
+
+[auth]
+password = "수업용 공유 비밀번호"  # 선택, 설정 시 학생에게 알려준 뒤 입력받음
 """,
             language="toml",
         )
         st.code(
             "export QUALTRICS_API_TOKEN=YOUR_TOKEN\n"
-            "export QUALTRICS_DATA_CENTER=syd1",
+            "export QUALTRICS_DATA_CENTER=hnd1\n"
+            "export APP_PASSWORD=...",
             language="bash",
         )
     st.stop()
