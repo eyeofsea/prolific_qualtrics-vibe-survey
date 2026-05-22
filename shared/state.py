@@ -12,6 +12,8 @@ STUDY_TITLE = "study_title"
 EXPECTED_MINUTES = "expected_minutes"
 SCALES_SUMMARY = "scales_summary"
 PROLIFIC_API_KEY = "prolific_api_key"
+QUALTRICS_SURVEY_ID = "qualtrics_survey_id"
+QUALTRICS_SURVEY_NAME = "qualtrics_survey_name"
 
 
 DEFAULTS: dict[str, Any] = {
@@ -20,6 +22,8 @@ DEFAULTS: dict[str, Any] = {
     EXPECTED_MINUTES: 8,
     SCALES_SUMMARY: None,
     PROLIFIC_API_KEY: None,
+    QUALTRICS_SURVEY_ID: None,
+    QUALTRICS_SURVEY_NAME: None,
 }
 
 
